@@ -9,10 +9,10 @@ namespace UMF
         {
             //u = t*(x-3)(x+3)
             //MKE mke = new MKE((x) => 0, (u, x) => u * u, (u, x) => 2 * u, (x, t) => t * t * x * x * x, (x) => 1, new BC1((t) => -2*t), new BC1((t) => 2 * t));//u0 sigma dersigma f lambda BCL BCR
-            MKE mke = new MKE((x) => 0, (u, x) => u, (u, x) => 1, (x, t) => t * (x - 3) * (x + 3) * (x - 3) * (x + 3) - 2 * t, (x) => 1, new BC1((t) => 0), new BC1((t) => 0));//u0 sigma dersigma f lambda BCL BCR
+            MKE mke = new MKE((x) => 0, (u, x) => u, (u, x) => 0, (x, t) => t*x*x*x*x*x*x-6*x*t, (x) => 1, new BC1((t) => -27*t), new BC1((t) => 27*t));//u0 sigma dersigma f lambda BCL BCR
             //MKE mke = new MKE((x) => 0, (x) => 1, (x, t) => 1, (x) => 0);
             mke.ReadMeshAndBC();
-            mke.Solve(1e-15, 10000, 0.8);
+            mke.Solve(1e-15, 10000, 0.7);
             for (int i = 0; i < mke.Timegrid.Length; i++)
             {
                 string res = "";
@@ -22,7 +22,7 @@ namespace UMF
                 }
                 Console.WriteLine(res);
             }
-            Console.WriteLine("trak sosi");
+            Console.WriteLine("hello world");
         }
     }
     public class MKE
