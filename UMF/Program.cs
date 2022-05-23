@@ -9,10 +9,11 @@ namespace UMF
         {
             //u = t*(x-3)(x+3)
             //MKE mke = new MKE((x) => 0, (u, x) => u * u, (u, x) => 2 * u, (x, t) => t * t * x * x * x, (x) => 1, new BC1((t) => -2*t), new BC1((t) => 2 * t));//u0 sigma dersigma f lambda BCL BCR
-            MKE mke = new MKE((x) => 0, (u, x) => u, (u, x) => 0, (x, t) => t*x*x*x*x*x*x-6*x*t, (x) => 1, new BC1((t) => -27*t), new BC1((t) => 27*t));//u0 sigma dersigma f lambda BCL BCR
+            Func<double,double,double> u = (double x, double t) => Math.Exp(x) * t;
+            MKE mke = new MKE((x) => 0, (u, x) => u, (u, x) => 1, (x, t) => t*x*x*x*x*x*x*x*x-12*x*x*t, (x) => 1, new BC1((t) => 81*t), new BC1((t) => 81*t));//u0 sigma dersigma f lambda BCL BCR
             //MKE mke = new MKE((x) => 0, (x) => 1, (x, t) => 1, (x) => 0);
-            mke.ReadMeshAndBC();
-            mke.Solve(1e-15, 10000, 0.7);
+            mke.ReadMesh();
+            mke.Solve(1e-15, 10000, 1);
             for (int i = 0; i < mke.Timegrid.Length; i++)
             {
                 string res = "";
@@ -53,7 +54,7 @@ namespace UMF
             this.RightBC = RightBC;
         }
 
-        public void ReadMeshAndBC()
+        public void ReadMesh()
         {
             var str = File.ReadAllLines("Mesh/XGrid.txt");
             str = str[0].Split(' ');
