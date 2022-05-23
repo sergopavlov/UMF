@@ -17,17 +17,17 @@ namespace UMF3
     {
         static void Main(string[] args)
         {
-            Func<double, double, double, double> ressin = (x, y, z) => x + y;
-            Func<double, double, double, double> rescos = (x, y, z) => z;
+            Func<double, double, double, double> ressin = (x, y, z) => y;
+            Func<double, double, double, double> rescos = (x, y, z) => y;
             List<BC> BCs = new();
             for (int i = 0; i < 5; i++)
             {
                 BCs.Add(new BC1((edges)i, rescos, 0));
                 BCs.Add(new BC1((edges)i, ressin, 1));
             }
-            BCs.Add(new BC3(edges.Back, (x, y, z) => z + 1, 1, 0));
-            BCs.Add(new BC3(edges.Back, (x, y, z) => x + y, 1, 1));
-            Mke mke = new Mke((x, y, z) => 1, (x, y, z) => 1, (x, y, z) => 1, (x, y, z) => -z + x + y, (x, y, z) => -z - x - y, 1, BCs);
+            BCs.Add(new BC2(edges.Back, (x, y, z) => 1, 0));
+            BCs.Add(new BC2(edges.Back, (x, y, z) => 1, 1));
+            Mke mke = new Mke((x, y, z) => 1, (x, y, z) => 1, (x, y, z) => 1, (x, y, z) => 0, (x, y, z) => -2 * y, 1, BCs);
             mke.ReadMesh();
             mke.SolveLU();
             Console.WriteLine(mke.GetSollution(1, 1, 2));
@@ -1052,12 +1052,12 @@ namespace UMF3
         {
             new double[]
             {
-                0.5,-0.5
+                1,-1
             },
 
             new double[]
             {
-                -0.5,0.5
+                -1,1
             }
         };
         static double[][] Mmatr = new double[][]
