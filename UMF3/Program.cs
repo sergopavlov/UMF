@@ -18,31 +18,57 @@ namespace UMF3
         static void Main(string[] args)
         {
             Func<double, double, double, double> ressin = (x, y, z) => y;
-            Func<double, double, double, double> rescos = (x, y, z) => y;
+            Func<double, double, double, double> rescos = (x, y, z) => x;
             List<BC> BCs = new();
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < 6; i++)
             {
                 BCs.Add(new BC1((edges)i, rescos, 0));
                 BCs.Add(new BC1((edges)i, ressin, 1));
             }
-            BCs.Add(new BC2(edges.Back, (x, y, z) => 1, 0));
-            BCs.Add(new BC2(edges.Back, (x, y, z) => 1, 1));
-            Mke mke = new Mke((x, y, z) => 1, (x, y, z) => 1, (x, y, z) => 1, (x, y, z) => 0, (x, y, z) => -2 * y, 1, BCs);
+            double omega = 1e1;
+            double lambda = 100000;
+            double sigma = 1;
+            double hi = 1e-11;
+            Mke mke = new Mke((x, y, z) => lambda, (x, y, z) => sigma, (x, y, z) => hi, (x, y, z) => -hi * omega * omega * x + omega * sigma * y, (x, y, z) => -hi * omega * omega * y - omega * sigma * x, omega, BCs);
             mke.ReadMesh();
             mke.SolveLU();
-            Console.WriteLine(mke.GetSollution(1, 1, 2));
+            //mke.SolveLOS(1e-15,10000);
+
+            double pogr = 0;
+            double norm = 0;
+            double z = 0;
+            for (int i = 0; i < mke.Zgrid.Count; i++)
+            {
+                double y = 0;
+                for (int j = 0; j < mke.Ygrid.Count; j++)
+                {
+                    double x = 0;
+                    for (int k = 0; k < mke.Xgrid.Count; k++)
+                    {
+                        int index = 2 * (k + mke.Xgrid.Count * j + mke.Xgrid.Count * mke.Ygrid.Count * i);
+                        pogr += (mke.q[index] - rescos(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i]))* (mke.q[index] - rescos(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i]));
+                        pogr += (mke.q[index+1] - ressin(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i]))* (mke.q[index + 1] - ressin(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i]));
+                        norm += rescos(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i]) * rescos(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i]);
+                        norm += ressin(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i]) * ressin(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i]);
+                        x += 1;
+                    }
+                    y += 1;
+                }
+                z += 1;
+            }
+            Console.WriteLine($"{Math.Sqrt(pogr / norm)} {mke.q.Count}");
         }
     }
     public class Mke
     {
         int n;
         int m;
-        private List<double> Xgrid = new();
-        private List<double> Ygrid = new();
-        private List<double> Zgrid = new();
+        public List<double> Xgrid = new();
+        public List<double> Ygrid = new();
+        public List<double> Zgrid = new();
         MatrixSparce mat = new();
         MatrixProfile matprof;
-        List<double> q = new();
+        public List<double> q = new();
         private Func<double, double, double, double> lambda;
         private Func<double, double, double, double> sigma;
         private Func<double, double, double, double> hi;
