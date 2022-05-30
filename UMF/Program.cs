@@ -10,10 +10,11 @@ namespace UMF
             //u = t*(x-3)(x+3)
             //MKE mke = new MKE((x) => 0, (u, x) => u * u, (u, x) => 2 * u, (x, t) => t * t * x * x * x, (x) => 1, new BC1((t) => -2*t), new BC1((t) => 2 * t));//u0 sigma dersigma f lambda BCL BCR
             Func<double, double, double> u = (double x, double t) => Math.Exp(x) * t;
-            MKE mke = new MKE((x) => 0, (u, x) => u, (u, x) => 1, (x, t) => t*x*x, (x) => 1, new BC1((t) => t*1), new BC1((t) => Math.Pow(9,1)* t));//u0 sigma dersigma f lambda BCL BCR
+            MKE mke = new MKE((x) => 0, (u, x) => u, (u, x) => 1, (x, t) => t * x * x, (x) => 1, new BC1((t) => t * 1), new BC1((t) => Math.Pow(3, 1) * t));//u0 sigma dersigma f lambda BCL BCR
             //MKE mke = new MKE((x) => 0, (x) => 1, (x, t) => 1, (x) => 0);
             mke.ReadMesh();
-            mke.SolveNewton(1e-7, 10000, 1);
+            mke.SolveNewton(1e-15, 1000, 0.8);
+            //mke.SolveSimpleIteration(1e-15, 10000, 0.8);
             Console.WriteLine("hello world");
         }
     }
@@ -101,141 +102,7 @@ namespace UMF
             double[] iks = new double[3];
             double[] funcs = new double[3];
             double dt = Timegrid[iter] - Timegrid[iter - 1];
-            //итерация по неявности
-            while (flag && iternum < maxiter)
-            {
-                //создаем матрицу
-                for (int i = 0; i < 5; i++)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        AL[i][j] = 0;
-                    }
-                }
-                for (int i = 0; i < n; i++)
-                {
-                    bL[i] = 0;
-                }
-                for (int elemcounter = 0; elemcounter < elemcount; elemcounter++)
-                {
-                    nums[0] = 2 * elemcounter;
-                    nums[1] = 2 * elemcounter + 1;
-                    nums[2] = 2 * elemcounter + 2;
-                    iks[0] = Xgrid[elemcounter];
-                    iks[1] = (Xgrid[elemcounter] + Xgrid[elemcounter + 1]) / 2;
-                    iks[2] = Xgrid[elemcounter + 1];
-                    for (int i = 0; i < 3; i++)
-                    {
-                        funcs[i] = f(iks[i], Timegrid[iter]);
-                    }
-                    double avglambda = lambda((Xgrid[elemcounter] + Xgrid[elemcounter + 1]) / 2);
-                    double hx = Xgrid[elemcounter + 1] - Xgrid[elemcounter];
-                    for (int i = 0; i < 3; i++)
-                    {
-                        for (int j = 0; j < 3; j++)
-                        {
-                            AL[j - i + 2][nums[i]] += avglambda * Matrices.GMatr[i][j] / hx;
-
-                            for (int k = 0; k < 3; k++)
-                            {
-                                AL[j - i + 2][nums[i]] += hx * sigma(Getsollution(iks[k], iter), iks[k]) * Matrices.MMatr[k][i][j] / dt;
-                            }
-                        }
-                        double curb = 0;
-                        for (int j = 0; j < 3; j++)
-                        {
-                            double cursigma = sigma(Getsollution(iks[j], iter), iks[j]);
-                            bL[nums[i]] += funcs[j] * hx * Matrices.Fmatr[i][j];
-                            for (int k = 0; k < 3; k++)
-                            {
-                                curb += hx * cursigma * q[iter - 1][nums[k]] * Matrices.MMatr[j][k][i] / dt;
-                            }
-                        }
-                        bL[nums[i]] += curb;
-                    }
-                }
-                //краевые условия 
-                double value;
-                switch (LeftBC.type)
-                {
-                    case 1:
-                        value = ((BC1)LeftBC).value(Timegrid[iter]);
-                        bL[0] = value;
-                        AL[2][0] = 1;
-                        bL[1] -= value * AL[3][0];
-                        bL[2] -= value * AL[4][0];
-                        AL[0][2] = 0;
-                        AL[1][1] = 0;
-                        AL[3][0] = 0;
-                        AL[4][0] = 0;
-                        break;
-                    case 2:
-                        value = ((BC2)LeftBC).theta(Timegrid[iter]);
-                        bL[0] += value;
-                        break;
-                    case 3:
-                        value = ((BC3)LeftBC).beta(Timegrid[iter]);
-                        bL[0] += value * ((BC3)LeftBC).ub(Timegrid[iter]);
-                        AL[0][0] += value;
-                        break;
-                    default:
-                        break;
-                }
-                switch (RightBC.type)
-                {
-                    case 1:
-                        value = ((BC1)RightBC).value(Timegrid[iter]);
-                        bL[n - 1] = value;
-                        AL[2][n - 1] = 1;
-                        bL[n - 2] -= value * AL[3][n - 2];
-                        bL[n - 3] -= value * AL[4][n - 3];
-                        AL[0][n - 1] = 0;
-                        AL[1][n - 1] = 0;
-                        AL[3][n - 2] = 0;
-                        AL[4][n - 3] = 0;
-                        break;
-                    case 2://не сделано
-                        //b[0] += BC1.Item2;
-                        break;
-                    case 3://не сделано
-                        //b[0] += BC1.Item2 * BC1.Item3;
-                        //A[0][0] += BC1.Item2;
-                        break;
-                    default:
-                        break;
-                }
-                //проверим критерий остановки
-                MatrixMult(iter);
-                double summ1 = 0, summ2 = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    summ1 += (Aq[i] - bL[i]) * (Aq[i] - bL[i]);
-                    summ2 += (bL[i]) * (bL[i]);
-                }
-                if (Math.Sqrt(summ1 / summ2) < eps)
-                    flag = false;
-                //решаем слау
-                if (flag)
-                {
-                    LU();
-                    Gaus(iter, omega);
-                    iternum++;
-                }
-            }
-            Console.WriteLine($"{iter} {iternum}");
-        }
-        void MakeNewtonIteration(int iter, double eps, int maxiter, double omega)
-        {
-            for (int i = 0; i < n; i++)
-            {
-                q[iter][i] = q[iter - 1][i];
-            }
-            int iternum = 0;
-            bool flag = true;
-            int[] nums = new int[3];
-            double[] iks = new double[3];
-            double[] funcs = new double[3];
-            double dt = Timegrid[iter] - Timegrid[iter - 1];
+            double summ1 = 0, summ2 = 0;
             //итерация по неявности
             while (flag && iternum < maxiter)
             {
@@ -251,6 +118,7 @@ namespace UMF
                 for (int i = 0; i < n; i++)
                 {
                     bL[i] = 0;
+                    b[i] = 0;
                 }
                 for (int elemcounter = 0; elemcounter < elemcount; elemcounter++)
                 {
@@ -272,24 +140,11 @@ namespace UMF
                         {
                             AL[j - i + 2][nums[i]] += avglambda * Matrices.GMatr[i][j] / hx;
                             A[j - i + 2][nums[i]] += avglambda * Matrices.GMatr[i][j] / hx;
+
                             for (int k = 0; k < 3; k++)
                             {
-                                AL[j - i + 2][nums[i]] += hx * sigma(Getsollution(iks[k], iter), iks[k]) * Matrices.MMatr[k][i][j] / dt;//вклад от A(q0)
-                                A[j - i + 2][nums[i]] += hx * sigma(Getsollution(iks[k], iter), iks[k]) * Matrices.MMatr[k][i][j] / dt;//вклад от A(q0)
-                            }
-                            for (int r = 0; r < 3; r++)// сумма производных А
-                            {
-                                for (int k = 0; k < 3; k++)// сумма от замены интерполянтом
-                                {
-                                AL[j - i + 2][nums[i]] += hx * dersigma(Getsollution(iks[k], iter), iks[k]) * Matrices.MMatr2[r][k][i][j] / dt*q[iter][nums[r]];
-                                }
-                            }
-                            for (int p = 0; p < 3; p++)//вклад от линеаризации правой части
-                            {
-                                for (int k = 0; k < 3; k++)
-                                {
-                                    AL[j - i + 2][nums[i]] -= hx * dersigma(Getsollution(iks[p], iter), iks[p]) * Matrices.MMatr2[p][k][i][j] / dt * q[iter - 1][nums[k]];
-                                }
+                                AL[j - i + 2][nums[i]] += hx * sigma(Getsollution(iks[k], iter), iks[k]) * Matrices.MMatr[k][i][j] / dt;
+                                A[j - i + 2][nums[i]] += hx * sigma(Getsollution(iks[k], iter), iks[k]) * Matrices.MMatr[k][i][j] / dt;
                             }
                         }
                         double curb = 0;
@@ -305,28 +160,6 @@ namespace UMF
                         }
                         bL[nums[i]] += curb;
                         b[nums[i]] += curb;
-                        for (int j = 0; j < 3; j++)
-                        {
-                            for (int r = 0; r < 3; r++)
-                            {
-                                for (int k = 0; k < 3; k++)
-                                {
-                                    bL[nums[i]] += hx / dt * q[iter][nums[j]] * q[iter][nums[r]] * dersigma(Getsollution(iks[k], iter), iks[k]) * Matrices.MMatr2[i][j][r][k];
-
-                                }
-                            }
-                        }
-                        for (int r = 0; r < 3; r++)//цикл формула
-                        {
-                            for (int k = 0; k < 3; k++)//цикл интерполяция
-                            {
-                                for (int p = 0; p < 3; p++)//цикл умноженич на матрицу
-                                {
-                                    bL[nums[i]] -= hx / dt * q[iter - 1][nums[p]] * dersigma(Getsollution(iks[k], iter), iks[k]) * Matrices.MMatr2[i][p][k][r]*q[iter][nums[r]];
-
-                                }
-                            }
-                        }
                     }
                 }
                 //краевые условия 
@@ -378,8 +211,8 @@ namespace UMF
                         AL[4][n - 3] = 0;
                         b[n - 1] = value;
                         A[2][n - 1] = 1;
-                        b[n - 2] -= value * AL[3][n - 2];
-                        b[n - 3] -= value * AL[4][n - 3];
+                        b[n - 2] -= value * A[3][n - 2];
+                        b[n - 3] -= value * A[4][n - 3];
                         A[0][n - 1] = 0;
                         A[1][n - 1] = 0;
                         A[3][n - 2] = 0;
@@ -397,11 +230,12 @@ namespace UMF
                 }
                 //проверим критерий остановки
                 MatrixMult(iter);
-                double summ1 = 0, summ2 = 0;
+                summ1 = 0;
+                summ2 = 0;
                 for (int i = 0; i < n; i++)
                 {
-                    summ1 += (Aq[i] - b[i]) * (Aq[i] - b[i]);
-                    summ2 += (b[i]) * (b[i]);
+                    summ1 += (Aq[i] - bL[i]) * (Aq[i] - bL[i]);
+                    summ2 += (bL[i]) * (bL[i]);
                 }
                 if (Math.Sqrt(summ1 / summ2) < eps)
                     flag = false;
@@ -413,7 +247,190 @@ namespace UMF
                     iternum++;
                 }
             }
-            Console.WriteLine($"{iter} {iternum}");
+            Console.WriteLine($"{iter} {iternum} {Math.Sqrt(summ1/summ2)}");
+        }
+        void MakeNewtonIteration(int iter, double eps, int maxiter, double omega)
+        {
+            for (int i = 0; i < n; i++)
+            {
+                q[iter][i] = q[iter - 1][i];
+            }
+            int iternum = 0;
+            bool flag = true;
+            int[] nums = new int[3];
+            double[] iks = new double[3];
+            double[] funcs = new double[3];
+            double dt = Timegrid[iter] - Timegrid[iter - 1];
+            //итерация по неявности
+            double relresidual = 1;
+            while (relresidual>eps && iternum < maxiter)
+            {
+                //создаем матрицу
+                for (int i = 0; i < 5; i++)
+                {
+                    for (int j = 0; j < n; j++)
+                    {
+                        AL[i][j] = 0;
+                        A[i][j] = 0;
+                    }
+                }
+                for (int i = 0; i < n; i++)
+                {
+                    bL[i] = 0;
+                    b[i] = 0;
+                }
+                for (int elemcounter = 0; elemcounter < elemcount; elemcounter++)
+                {
+                    nums[0] = 2 * elemcounter;
+                    nums[1] = 2 * elemcounter + 1;
+                    nums[2] = 2 * elemcounter + 2;
+                    iks[0] = Xgrid[elemcounter];
+                    iks[1] = (Xgrid[elemcounter] + Xgrid[elemcounter + 1]) / 2;
+                    iks[2] = Xgrid[elemcounter + 1];
+                    for (int i = 0; i < 3; i++)
+                    {
+                        funcs[i] = f(iks[i], Timegrid[iter]);
+                    }
+                    double avglambda = lambda((Xgrid[elemcounter] + Xgrid[elemcounter + 1]) / 2);
+                    double hx = Xgrid[elemcounter + 1] - Xgrid[elemcounter];
+                    for (int i = 0; i < 3; i++)
+                    {
+                        for (int j = 0; j < 3; j++)
+                        {
+                            AL[j - i + 2][nums[i]] += avglambda * Matrices.GMatr[i][j] / hx;
+                            A[j - i + 2][nums[i]] += avglambda * Matrices.GMatr[i][j] / hx;
+                            for (int k = 0; k < 3; k++)
+                            {
+                                AL[j - i + 2][nums[i]] += hx * sigma(Getsollution(iks[k], iter), iks[k]) * Matrices.MMatr[k][i][j] / dt;//вклад от A(q0)
+                                A[j - i + 2][nums[i]] += hx * sigma(Getsollution(iks[k], iter), iks[k]) * Matrices.MMatr[k][i][j] / dt;//вклад от A(q0)
+
+                            }
+                            for (int r = 0; r < 3; r++)
+                            {
+                            AL[j - i + 2][nums[i]] += hx * dersigma(Getsollution(iks[j], iter), iks[j]) * Matrices.MMatr[j][i][r] / dt * q[iter][nums[r]];
+                            }
+                            for (int p = 0; p < 3; p++)//вклад от линеаризации правой части
+                            {
+                                AL[j - i + 2][nums[i]] -= hx * dersigma(Getsollution(iks[j], iter), iks[j]) * Matrices.MMatr[p][i][j] / dt * q[iter - 1][nums[p]];
+                            }
+                        }
+                        double curb = 0;
+                        for (int j = 0; j < 3; j++)
+                        {
+                            double cursigma = sigma(Getsollution(iks[j], iter), iks[j]);
+                            bL[nums[i]] += funcs[j] * hx * Matrices.Fmatr[i][j];
+                            b[nums[i]] += funcs[j] * hx * Matrices.Fmatr[i][j];
+
+                            for (int k = 0; k < 3; k++)
+                            {
+                                curb += hx * cursigma * q[iter - 1][nums[k]] * Matrices.MMatr[j][k][i] / dt;
+                            }
+                        }
+                        bL[nums[i]] += curb;
+                        b[nums[i]] += curb;
+                        for (int j = 0; j < 3; j++)
+                        {
+                            for (int r = 0; r < 3; r++)
+                            {
+                            bL[nums[i]] += hx / dt * q[iter][nums[r]] * q[iter][nums[j]] * dersigma(Getsollution(iks[r], iter), iks[r]) * Matrices.MMatr[i][j][r];
+                            }
+                        }
+                        for (int j = 0; j < 3; j++)
+                        {
+                            for (int p = 0; p < 3; p++)//цикл умноженич на матрицу
+                            {
+                                bL[nums[i]] -= hx / dt * q[iter - 1][nums[p]] * dersigma(Getsollution(iks[j], iter), iks[j]) * Matrices.MMatr[i][p][j] * q[iter][nums[j]];
+
+                            }
+                        }
+                        
+                    }
+                }
+                //краевые условия 
+                double value;
+                switch (LeftBC.type)
+                {
+                    case 1:
+                        value = ((BC1)LeftBC).value(Timegrid[iter]);
+                        bL[0] = value;
+                        AL[2][0] = 1;
+                        bL[1] -= value * AL[3][0];
+                        bL[2] -= value * AL[4][0];
+                        AL[0][2] = 0;
+                        AL[1][1] = 0;
+                        AL[3][0] = 0;
+                        AL[4][0] = 0;
+                        b[0] = value;
+                        A[2][0] = 1;
+                        b[1] -= value * A[3][0];
+                        b[2] -= value * A[4][0];
+                        A[0][2] = 0;
+                        A[1][1] = 0;
+                        A[3][0] = 0;
+                        A[4][0] = 0;
+                        break;
+                    case 2:
+                        value = ((BC2)LeftBC).theta(Timegrid[iter]);
+                        bL[0] += value;
+                        break;
+                    case 3:
+                        value = ((BC3)LeftBC).beta(Timegrid[iter]);
+                        bL[0] += value * ((BC3)LeftBC).ub(Timegrid[iter]);
+                        AL[0][0] += value;
+                        break;
+                    default:
+                        break;
+                }
+                switch (RightBC.type)
+                {
+                    case 1:
+                        value = ((BC1)RightBC).value(Timegrid[iter]);
+                        bL[n - 1] = value;
+                        AL[2][n - 1] = 1;
+                        bL[n - 2] -= value * AL[3][n - 2];
+                        bL[n - 3] -= value * AL[4][n - 3];
+                        AL[0][n - 1] = 0;
+                        AL[1][n - 1] = 0;
+                        AL[3][n - 2] = 0;
+                        AL[4][n - 3] = 0;
+                        b[n - 1] = value;
+                        A[2][n - 1] = 1;
+                        b[n - 2] -= value * A[3][n - 2];
+                        b[n - 3] -= value * A[4][n - 3];
+                        A[0][n - 1] = 0;
+                        A[1][n - 1] = 0;
+                        A[3][n - 2] = 0;
+                        A[4][n - 3] = 0;
+                        break;
+                    case 2://не сделано
+                        //b[0] += BC1.Item2;
+                        break;
+                    case 3://не сделано
+                        //b[0] += BC1.Item2 * BC1.Item3;
+                        //A[0][0] += BC1.Item2;
+                        break;
+                    default:
+                        break;
+                }
+                //проверим критерий остановки
+               
+                //решаем слау
+                if (relresidual>eps)
+                {
+                    LU();
+                    Gaus(iter, omega);
+                    iternum++;
+                }
+                MatrixMult(iter);
+                double summ1 = 0, summ2 = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    summ1 += (Aq[i] - b[i]) * (Aq[i] - b[i]);
+                    summ2 += (b[i]) * (b[i]);
+                }
+                relresidual = Math.Sqrt(summ1 / summ2);
+            }
+            Console.WriteLine($"{iter} {iternum} {relresidual}");
         }
         void LU()
         {
