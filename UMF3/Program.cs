@@ -25,15 +25,29 @@ namespace UMF3
                 BCs.Add(new BC1((edges)i, rescos, 0));
                 BCs.Add(new BC1((edges)i, ressin, 1));
             }
-            double omega = 1e1;
+            double omega = 10;
             double lambda = 100000;
             double sigma = 1;
             double hi = 1e-11;
             Mke mke = new Mke((x, y, z) => lambda, (x, y, z) => sigma, (x, y, z) => hi, (x, y, z) => -hi * omega * omega * x + omega * sigma * y, (x, y, z) => -hi * omega * omega * y - omega * sigma * x, omega, BCs);
             mke.ReadMesh();
-            mke.SolveLU();
+            //mke.SolveLU();
             //mke.SolveLOS(1e-15,10000);
-
+            // mke.SolveLOSPrecond(1e-15, 10000);
+            mke.SolveGMRES(1e-15, 1000000, 5);
+            //MatrixSparce test = new();
+            //test.al = new List<double>() { 3, 3, 4, 13, 3, 5, 16, 5, 7, 3 };
+            //test.au = new List<double>() { 2, 12, 5, 14, 8, 9, 5, 19, 34, 52 };
+            //test.di = new List<double>() { 1, 4, 6, 4, 3 };
+            //test.b = new List<double>() { 122, 153, 235, 310, 74 };
+            //test.ia = new List<int>() { 0, 0, 1, 3, 6, 10 };
+            //test.ja = new List<int>() { 0, 0, 1, 0, 1, 2, 0, 1, 2, 3 };
+            //test.n = 5;
+            //List<double> x0 = new List<double>();
+            //for (int i = 0; i < 5; i++)
+            //{
+            //    x0.Add(0);
+            //}
             double pogr = 0;
             double norm = 0;
             double z = 0;
@@ -46,8 +60,8 @@ namespace UMF3
                     for (int k = 0; k < mke.Xgrid.Count; k++)
                     {
                         int index = 2 * (k + mke.Xgrid.Count * j + mke.Xgrid.Count * mke.Ygrid.Count * i);
-                        pogr += (mke.q[index] - rescos(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i]))* (mke.q[index] - rescos(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i]));
-                        pogr += (mke.q[index+1] - ressin(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i]))* (mke.q[index + 1] - ressin(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i]));
+                        pogr += (mke.q[index] - rescos(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i])) * (mke.q[index] - rescos(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i]));
+                        pogr += (mke.q[index + 1] - ressin(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i])) * (mke.q[index + 1] - ressin(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i]));
                         norm += rescos(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i]) * rescos(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i]);
                         norm += ressin(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i]) * ressin(mke.Xgrid[k], mke.Ygrid[j], mke.Zgrid[i]);
                         x += 1;
@@ -56,7 +70,7 @@ namespace UMF3
                 }
                 z += 1;
             }
-            Console.WriteLine($"{Math.Sqrt(pogr / norm)} {mke.q.Count}");
+            Console.WriteLine($"{Math.Sqrt(pogr / norm)} {mke.q.Count} {lambda} {sigma} {hi} {omega}");
         }
     }
     public class Mke
@@ -735,16 +749,32 @@ namespace UMF3
                                 }
                                 for (int i = index[p] + 1; i < mat.n; i++)
                                 {
-                                    int k = mat.ia[i];
-                                    while (mat.ja[k] < index[p] && k < mat.ia[i + 1] - 1)
+                                    int low = mat.ia[i];
+                                    int high = mat.ia[i + 1];
+                                    bool flag = false;
+                                    int mid = 0;
+                                    while (low <= high)
                                     {
-                                        k++;
+                                        mid = (low + high) / 2;
+                                        int midVal = mat.ja[mid];
+                                        if (midVal < index[p])
+                                            low = mid + 1;
+                                        else
+                                        {
+                                            if (midVal > index[p])
+                                                high = mid - 1;
+                                            else
+                                            {
+                                                flag = true;
+                                                break;
+                                            }
+                                        }
                                     }
-                                    if (mat.ja[k] == index[p])
+                                    if (flag)
                                     {
-                                        mat.b[i] -= mat.al[k] * curitem.value(x[p % 2], y[p / 2], z);
-                                        mat.au[k] = 0;
-                                        mat.al[k] = 0;
+                                        mat.b[i] -= mat.al[mid] * curitem.value(x[p % 2], y[p / 2], z);
+                                        mat.au[mid] = 0;
+                                        mat.al[mid] = 0;
                                     }
                                 }
                             }
@@ -778,16 +808,32 @@ namespace UMF3
                                 }
                                 for (int i = index[p] + 1; i < mat.n; i++)
                                 {
-                                    int k = mat.ia[i];
-                                    while (mat.ja[k] < index[p] && k < mat.ia[i + 1] - 1)
+                                    int low = mat.ia[i];
+                                    int high = mat.ia[i + 1];
+                                    bool flag = false;
+                                    int mid = 0;
+                                    while (low <= high)
                                     {
-                                        k++;
+                                        mid = (low + high) / 2;
+                                        int midVal = mat.ja[mid];
+                                        if (midVal < index[p])
+                                            low = mid + 1;
+                                        else
+                                        {
+                                            if (midVal > index[p])
+                                                high = mid - 1;
+                                            else
+                                            {
+                                                flag = true;
+                                                break;
+                                            }
+                                        }
                                     }
-                                    if (mat.ja[k] == index[p])
+                                    if (flag)
                                     {
-                                        mat.b[i] -= mat.al[k] * curitem.value(x[p % 2], y[p / 2], z);
-                                        mat.al[k] = 0;
-                                        mat.au[k] = 0;
+                                        mat.b[i] -= mat.al[mid] * curitem.value(x[p % 2], y[p / 2], z);
+                                        mat.au[mid] = 0;
+                                        mat.al[mid] = 0;
                                     }
                                 }
                             }
@@ -821,16 +867,32 @@ namespace UMF3
                                 }
                                 for (int i = index[p] + 1; i < mat.n; i++)
                                 {
-                                    int k = mat.ia[i];
-                                    while (mat.ja[k] < index[p] && k < mat.ia[i + 1] - 1)
+                                    int low = mat.ia[i];
+                                    int high = mat.ia[i + 1];
+                                    bool flag = false;
+                                    int mid = 0;
+                                    while (low <= high)
                                     {
-                                        k++;
+                                        mid = (low + high) / 2;
+                                        int midVal = mat.ja[mid];
+                                        if (midVal < index[p])
+                                            low = mid + 1;
+                                        else
+                                        {
+                                            if (midVal > index[p])
+                                                high = mid - 1;
+                                            else
+                                            {
+                                                flag = true;
+                                                break;
+                                            }
+                                        }
                                     }
-                                    if (mat.ja[k] == index[p])
+                                    if (flag)
                                     {
-                                        mat.b[i] -= mat.al[k] * curitem.value(x, y[p % 2], z[p / 2]);
-                                        mat.au[k] = 0;
-                                        mat.al[k] = 0;
+                                        mat.b[i] -= mat.al[mid] * curitem.value(x, y[p % 2], z[p / 2]);
+                                        mat.au[mid] = 0;
+                                        mat.al[mid] = 0;
                                     }
                                 }
                             }
@@ -864,16 +926,32 @@ namespace UMF3
                                 }
                                 for (int i = index[p] + 1; i < mat.n; i++)
                                 {
-                                    int k = mat.ia[i];
-                                    while (mat.ja[k] < index[p] && k < mat.ia[i + 1] - 1)
+                                    int low = mat.ia[i];
+                                    int high = mat.ia[i + 1];
+                                    bool flag = false;
+                                    int mid = 0;
+                                    while (low <= high)
                                     {
-                                        k++;
+                                        mid = (low + high) / 2;
+                                        int midVal = mat.ja[mid];
+                                        if (midVal < index[p])
+                                            low = mid + 1;
+                                        else
+                                        {
+                                            if (midVal > index[p])
+                                                high = mid - 1;
+                                            else
+                                            {
+                                                flag = true;
+                                                break;
+                                            }
+                                        }
                                     }
-                                    if (mat.ja[k] == index[p])
+                                    if (flag)
                                     {
-                                        mat.b[i] -= mat.al[k] * curitem.value(x, y[p % 2], z[p / 2]);
-                                        mat.au[k] = 0;
-                                        mat.al[k] = 0;
+                                        mat.b[i] -= mat.al[mid] * curitem.value(x, y[p % 2], z[p / 2]);
+                                        mat.au[mid] = 0;
+                                        mat.al[mid] = 0;
                                     }
                                 }
                             }
@@ -907,21 +985,37 @@ namespace UMF3
                                 }
                                 for (int i = index[p] + 1; i < mat.n; i++)
                                 {
-                                    int k = mat.ia[i];
-                                    while (mat.ja[k] < index[p] && k < mat.ia[i + 1] - 1)
+                                    int low = mat.ia[i];
+                                    int high = mat.ia[i + 1];
+                                    bool flag = false;
+                                    int mid = 0;
+                                    while (low <= high)
                                     {
-                                        k++;
+                                        mid = (low + high) / 2;
+                                        int midVal = mat.ja[mid];
+                                        if (midVal < index[p])
+                                            low = mid + 1;
+                                        else
+                                        {
+                                            if (midVal > index[p])
+                                                high = mid - 1;
+                                            else
+                                            {
+                                                flag = true;
+                                                break;
+                                            }
+                                        }
                                     }
-                                    if (mat.ja[k] == index[p])
+                                    if (flag)
                                     {
-                                        mat.b[i] -= mat.al[k] * curitem.value(x[p % 2], y, z[p / 2]);
-                                        mat.au[k] = 0;
-                                        mat.al[k] = 0;
+                                        mat.b[i] -= mat.al[mid] * curitem.value(x[p % 2], y, z[p / 2]);
+                                        mat.au[mid] = 0;
+                                        mat.al[mid] = 0;
                                     }
                                 }
                             }
                         }
-                        break;
+                            break;
                     case edges.Back:
                         foreach (var el in elems.FindAll((T) => T.ylownum + 1 == Ygrid.Count - 1))
                         {
@@ -950,16 +1044,32 @@ namespace UMF3
                                 }
                                 for (int i = index[p] + 1; i < mat.n; i++)
                                 {
-                                    int k = mat.ia[i];
-                                    while (mat.ja[k] < index[p] && k < mat.ia[i + 1] - 1)
+                                    int low = mat.ia[i];
+                                    int high = mat.ia[i + 1];
+                                    bool flag = false;
+                                    int mid = 0;
+                                    while (low <= high)
                                     {
-                                        k++;
+                                        mid = (low + high) / 2;
+                                        int midVal = mat.ja[mid];
+                                        if (midVal < index[p])
+                                            low = mid + 1;
+                                        else
+                                        {
+                                            if (midVal > index[p])
+                                                high = mid - 1;
+                                            else
+                                            {
+                                                flag = true;
+                                                break;
+                                            }
+                                        }
                                     }
-                                    if (mat.ja[k] == index[p])
+                                    if (flag)
                                     {
-                                        mat.b[i] -= mat.al[k] * curitem.value(x[p % 2], y, z[p / 2]);
-                                        mat.au[k] = 0;
-                                        mat.al[k] = 0;
+                                        mat.b[i] -= mat.al[mid] * curitem.value(x[p % 2], y, z[p / 2]);
+                                        mat.au[mid] = 0;
+                                        mat.al[mid] = 0;
                                     }
                                 }
                             }
@@ -999,6 +1109,42 @@ namespace UMF3
                 x0.Add(0);
             }
             q = mat.LOS(x0, maxiter, eps);
+        }
+        public void SolveLOSPrecond(double eps, int maxiter)
+        {
+            GenerateProfile();
+            foreach (var item in elems)
+            {
+                Addlocal(item);
+            }
+            AddBoundary2();
+            AddBoundary3();
+            AddBoundary1();
+            List<double> x0 = new();
+            for (int i = 0; i < mat.n; i++)
+            {
+                x0.Add(0);
+            }
+            mat.LU();
+            q = mat.LoS_precond(x0, eps, maxiter);
+        }
+        public void SolveGMRES(double eps, int maxiter, int depth)
+        {
+            GenerateProfile();
+            foreach (var item in elems)
+            {
+                Addlocal(item);
+            }
+            AddBoundary2();
+            AddBoundary3();
+            AddBoundary1();
+            List<double> x0 = new();
+            for (int i = 0; i < mat.n; i++)
+            {
+                x0.Add(0);
+            }
+            mat.LU();
+            q = mat.GMRES(x0, eps, maxiter, depth);
         }
         public (double, double) GetSollution(double x, double y, double z)
         {
@@ -1106,10 +1252,6 @@ namespace UMF3
         public static double Mij2(int i, int j, double hx, double hy) =>
             hx * hy * Mmatr[i % 2][j % 2] * Mmatr[i / 2][j / 2];
     }
-    public class Matrix
-    {
-
-    }
     public class MatrixSparce
     {
         public List<double> al;
@@ -1118,6 +1260,9 @@ namespace UMF3
         public List<int> ia;
         public List<int> ja;
         public List<double> b;
+        public List<double> di_LU = new();
+        public List<double> au_LU = new();
+        public List<double> al_LU = new();
         public int n;
         public MatrixSparce() { }
         public List<double> MSG(List<double> x0, int maxiter, double eps)
@@ -1157,6 +1302,173 @@ namespace UMF3
             }
             return x0;
         }
+        public void LU()
+        {
+
+            foreach (var item in di)
+            {
+                di_LU.Add(item);
+            }
+            foreach (var item in au)
+            {
+                au_LU.Add(item);
+            }
+            foreach (var item in al)
+            {
+                al_LU.Add(item);
+            }
+            for (int i = 0; i < n; i++)
+            {
+                double sumdi = 0.0;
+
+                int i0 = ia[i];
+                int i1 = ia[i + 1];
+
+
+                for (int k = i0; k < i1; k++)
+                {
+                    int j = ja[k];
+                    int j0 = ia[j];
+
+                    int j1 = ia[j + 1];
+
+
+                    int ik = i0;
+                    int kj = j0;
+
+                    double suml = 0.0;
+                    double sumu = 0.0;
+
+                    while (ik < k)
+                    {
+
+                        if (ja[ik] == ja[kj])
+                        {
+
+                            suml += al_LU[ik] * au_LU[kj];
+                            sumu += au_LU[ik] * al_LU[kj];
+                            ik++;
+                            kj++;
+                        }
+
+                        else
+                        {
+                            if (ja[ik] > ja[kj])
+                            {
+                                kj++;
+                            }
+                            else
+                            {
+                                ik++;
+                            }
+                        }
+                    }
+
+                    al_LU[k] = al_LU[k] - suml;
+                    au_LU[k] = (au_LU[k] - sumu) / di_LU[j];
+                    sumdi += al_LU[k] * au_LU[k];
+                }
+
+                di_LU[i] = di_LU[i] - sumdi;
+            }
+        }
+        public List<double> LoS_precond(List<double> x0, double eps, int maxiter)
+        {
+            int k = 1;
+            List<double> buf = MatrixMult(x0);
+            double bnorm = 0;
+            for (int i = 0; i < n; i++)
+            {
+                buf[i] = b[i] - buf[i];
+            }
+            double rnorm = Math.Sqrt(DotProduct(buf, buf));
+            List<double> r = LUDirect(buf);
+            bnorm = Math.Sqrt(DotProduct(b, b));
+            List<double> z = LUReverse(r);
+            buf = MatrixMult(z);
+            List<double> p = LUDirect(buf);
+            double resid = 1;
+            while (resid > eps && rnorm / bnorm > eps * eps && k < maxiter)
+            {
+                double pp = DotProduct(p, p);
+                double pr = DotProduct(p, r);
+                double alpha = pr / pp;
+                for (int i = 0; i < n; i++)
+                {
+                    x0[i] += alpha * z[i];
+                    r[i] -= alpha * p[i];
+                }
+                rnorm = Math.Sqrt(DotProduct(r, r));
+                List<double> Ur = LUReverse(r);
+                buf = MatrixMult(Ur);
+                buf = LUDirect(buf);
+                double betta = -(DotProduct(p, buf) / pp);
+                for (int i = 0; i < n; i++)
+                {
+                    z[i] = Ur[i] + betta * z[i];
+                    p[i] = buf[i] + betta * p[i];
+                }
+                double test1 = 0;
+                double test2 = 0;
+                var asd = MatrixMult(x0);
+                for (int i = 0; i < n; i++)
+                {
+                    test1 += (asd[i] - b[i]) * (asd[i] - b[i]);
+                    test2 += b[i] * b[i];
+                }
+                resid = Math.Sqrt(test1 / test2);
+                k++;
+            }
+            Console.WriteLine($"{k} {rnorm / bnorm} {resid}");
+            return x0;
+        }
+        List<double> LUDirect(List<double> rpart)
+        {
+            List<double> res = new();
+            for (int i = 0; i < n; i++)
+            {
+                res.Add(rpart[i]);
+            }
+
+            for (int i = 0; i < n; i++)
+            {
+                double sum = 0.0;
+                for (int j = ia[i]; j < ia[i + 1]; j++)
+                    sum += al_LU[j] * res[ja[j]];
+                res[i] -= sum;
+                res[i] /= di_LU[i];
+            }
+            return res;
+        }
+        List<double> LUReverse(List<double> rpart)
+        {
+            List<double> res = new();
+            for (int i = 0; i < n; i++)
+            {
+                res.Add(rpart[i]);
+            }
+
+            for (int i = n - 1; i >= 0; i--)
+            {
+                for (int j = ia[i]; j < ia[i + 1]; j++)
+                    res[ja[j]] -= au_LU[j] * res[i];
+            }
+            return res;
+        }
+        List<double> MultU(List<double> x0)
+        {
+            List<double> res = new();
+            for (int i = 0; i < n; i++)
+            {
+                res.Add(x0[i]);
+                int k0 = ia[i], k1 = ia[i + 1];
+                for (int k = k0; k < k1; k++)
+                {
+                    res[i] += au_LU[k] * x0[ja[k]];
+                }
+            }
+            return res;
+        }
         public List<double> LOS(List<double> x0, int maxiter, double eps)
         {
             double bnorm = Math.Sqrt(DotProduct(b, b));
@@ -1192,6 +1504,125 @@ namespace UMF3
             }
             Console.WriteLine($"{rnorm / bnorm} {k}");
             return x0;
+        }
+        public List<double> GMRES(List<double> x0, double eps, int maxiter, int depth)
+        {
+            //Q верхнетреугольная обратный 
+            //S нижнетреугольная прямой
+            int curdepth = depth;
+            double bnorm = Math.Sqrt(DotProduct(b, b));
+            List<double> x = MultU(x0);//меняем на x с волной
+
+            var r = MatrixMult(x0);
+            for (int i = 0; i < n; i++)
+            {
+                r[i] = b[i] - r[i];
+            }
+            r = LUDirect(r);//считаем невязку с волной
+
+            List<List<double>> V = new();//транспонированная
+            double[][] H = new double[depth + 1][];
+            for (int i = 0; i < depth + 1; i++)
+            {
+                H[i] = new double[depth];
+            }
+            double rnorm = Math.Sqrt(DotProduct(r, r));
+            int iter = 0;
+            while (rnorm/bnorm>eps&&iter<maxiter)
+            {
+                curdepth = depth;
+                V.Add(new());
+                for (int i = 0; i < n; i++)
+                {
+                    V[0].Add(r[i] / rnorm);// добавляем первый вектор в матрицу V
+                }
+                for (int i = 0; i < depth; i++)// заполняется матрица H
+                {
+                    List<double> w = LUReverse(V[i]);
+                    w = MatrixMult(w);
+                    w = LUDirect(w);
+                    for (int j = 0; j <= i; j++)
+                    {
+                        H[j][i] = DotProduct(V[j], w);
+                    }
+                    for (int j = 0; j <= i; j++)
+                    {
+                        for (int k = 0; k < n; k++)
+                        {
+                            w[k] -= H[j][i] * V[j][k];
+                        }
+                    }
+
+                    H[i + 1][i] = Math.Sqrt(DotProduct(w, w));
+                    if (H[i + 1][i] == 0)// если новый вектор нулевой заканчиваем заполнение матриц
+                    {
+                        curdepth = i + 1;
+                        break;
+                    }
+                    else
+                    {
+                        V.Add(new());
+                        for (int k = 0; k < n; k++)
+                        {
+                            V[i + 1].Add(w[k] / H[i + 1][i]);//если ненулевой добавляем в матрицу V
+                        }
+                    }
+                }
+                List<double> d = new();//дальше будет минимизация d-Hz
+                d.Add(rnorm);
+                for (int i = 1; i < curdepth + 1; i++)
+                {
+                    d.Add(0);
+                }
+                for (int i = 0; i < curdepth; i++)//умножаем правую часть и матрицу на матрицу поворота чтобы убрать диагональ под главной
+                {
+                    double norm = Math.Sqrt(H[i][i] * H[i][i] + H[i + 1][i] * H[i + 1][i]);
+                    double c = H[i][i] / norm;
+                    double s = H[i + 1][i] / norm;
+                    for (int k = i; k < curdepth; k++)
+                    {
+                        double ii = c * H[i][k] + s * H[i + 1][k];
+                        double i1i = -s * H[i][k] + c * H[i + 1][k];
+                        H[i][k] = ii;
+                        H[i + 1][k] = i1i;
+                    }
+                    double d1 = d[i] * c + d[i + 1] * s;
+                    double d2 = -s * d[i] + c * d[i + 1];
+                    d[i] = d1;
+                    d[i + 1] = d2;
+                }
+
+                for (int i = curdepth - 1; i >= 0; i--)//обратный гаус для матрицы H верхнетреугольной
+                {
+                    double summ = 0;
+                    for (int j = curdepth - 1; j > i; j--)
+                    {
+                        summ += d[j] * H[i][j];
+                    }
+                    d[i] = (d[i] - summ) / H[i][i];
+                }
+
+                for (int i = 0; i < n; i++)//делаем добавку в x
+                {
+                    for (int j = 0; j < curdepth; j++)
+                    {
+                        x[i] += V[j][i] * d[j];
+                    }
+                }
+
+                r = LUReverse(x);
+                r = MatrixMult(r);
+                for (int i = 0; i < n; i++)
+                {
+                    r[i] = b[i] - r[i];
+                }
+                r = LUDirect(r);
+                rnorm = Math.Sqrt(DotProduct(r, r));
+                iter++;
+                V.Clear();
+            }
+            Console.WriteLine($"{iter} {rnorm / bnorm}");
+            return LUReverse(x);
         }
         public void PrintDense()
         {
