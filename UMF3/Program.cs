@@ -27,16 +27,17 @@ namespace UMF3
                 BCs.Add(new BC1((edges)i, rescos, 0));
                 BCs.Add(new BC1((edges)i, ressin, 1));
             }
-            double omega = 1;
+            
             double lambda = 100;
-            double sigma = 10;
+            double sigma = 1e+8;
             double hi = 1e-11;
+            double omega = 10;
             Mke mke = new Mke((x, y, z) => lambda, (x, y, z) => sigma, (x, y, z) => hi, (x, y, z) => -hi * omega * omega * x + omega * sigma * y, (x, y, z) => -hi * omega * omega * y - omega * sigma * x, omega, BCs);
             mke.ReadMesh();
             //mke.SolveLU();
             //mke.SolveLOS(1e-15,10000);
             //mke.SolveLOSPrecond(1e-15, 10000);
-            mke.SolveGMRES(1e-15, 1000000, 1);
+            mke.SolveGMRES(1e-15, 1000000, 30);
             //MatrixSparce test = new();
             //test.al = new List<double>() { 3, 3, 4, 13, 3, 5, 16, 5, 7, 3 };
             //test.au = new List<double>() { 2, 12, 5, 14, 8, 9, 5, 19, 34, 52 };
