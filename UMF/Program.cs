@@ -1,6 +1,6 @@
 ﻿using System;
 using System.IO;
-
+using System.Globalization;
 namespace UMF
 {
     class Program
@@ -13,8 +13,21 @@ namespace UMF
             MKE mke = new MKE((x) => x, (u, x) => u * u, (u, x) => 2 * u, (x, t) => x * t * t * x * x, (x) => 1, new BC1((t) => t * 1), new BC1((t) => 20 * t));//u0 sigma dersigma f lambda BCL BCR
             //MKE mke = new MKE((x) => 0, (x) => 1, (x, t) => 1, (x) => 0);
             mke.ReadMesh();
-            mke.SolveNewton(1e-15, 1000, 0.6);
+            mke.SolveNewton(1e-15, 10000, 0.8);
             //mke.SolveSimpleIteration(1e-15, 10000, 0.5);
+            for (int t = 1; t < mke.q.Length; t++)
+            {
+                double x = mke.Xgrid[0];
+                double summ1 = 0;
+                double summ2 = 0;
+                for (int i = 0; i < 9; i++)
+                {
+                    summ1 += (u(x, mke.Timegrid[t]) - mke.q[t][i]) * (u(x, mke.Timegrid[t]) - mke.q[t][i]);
+                    summ2 += u(x, mke.Timegrid[t]) * u(x, mke.Timegrid[t]);
+                    x += (mke.Xgrid[1] - mke.Xgrid[0]) / 2;
+                }
+                Console.WriteLine($"{t} {Math.Sqrt(summ1 / summ2)}");
+            }
             Console.WriteLine("hello world");
         }
     }
@@ -27,7 +40,7 @@ namespace UMF
         Func<double, double> lambda;
         public int n;
         private int elemcount;
-        private double[] Xgrid;
+        public double[] Xgrid;
         public double[] Timegrid;
         double[][] AL;
         double[][] A;
@@ -239,13 +252,17 @@ namespace UMF
                     summ1 += (Aq[i] - bL[i]) * (Aq[i] - bL[i]);
                     summ2 += (bL[i]) * (bL[i]);
                 }
-                relresidual = Math.Sqrt(summ1 / summ2);
-                LU();
-                Gaus(iter, omega);
-                iternum++;
-
+                if (Math.Sqrt(summ1 / summ2) < eps)
+                    flag = false;
+                //решаем слау
+                if (flag)
+                {
+                    LU();
+                    Gaus(iter, omega);
+                    iternum++;
+                }
             }
-            Console.WriteLine($"{iter} {iternum} {Math.Sqrt(summ1 / summ2)}");
+            Console.WriteLine($"{iter} {iternum} {Math.Sqrt(summ1/summ2)}");
         }
         void MakeNewtonIteration(int iter, double eps, int maxiter, double omega)
         {
@@ -254,7 +271,6 @@ namespace UMF
                 q[iter][i] = q[iter - 1][i];
             }
             int iternum = 0;
-            bool flag = true;
             int[] nums = new int[3];
             double[] iks = new double[3];
             double[] funcs = new double[3];
@@ -305,21 +321,11 @@ namespace UMF
                             }
                             for (int r = 0; r < 3; r++)
                             {
-                                for (int p = 0; p < 3; p++)
-                                {
-
-                                    AL[j - i + 2][nums[i]] += hx / dt * dersigma(Getsollution(iks[p], iter), iks[p]) * Matrices.MMatr2[j][i][r][p] * q[iter][nums[r]];
-                                }
-                                //AL[j - i + 2][nums[i]] += hx / dt * dersigma(q[iter][nums[j]], iks[j]) * Matrices.MMatr[j][i][r] * q[iter][nums[r]];
+                            AL[j - i + 2][nums[i]] += hx * dersigma(Getsollution(iks[j], iter), iks[j]) * Matrices.MMatr[j][i][r] / dt * q[iter][nums[r]];
                             }
-                            for (int k = 0; k < 3; k++)//вклад от линеаризации правой части
+                            for (int p = 0; p < 3; p++)//вклад от линеаризации правой части
                             {
-                                for (int p = 0; p < 3; p++)
-                                {
-                                    AL[j - i + 2][nums[i]] -= hx / dt * dersigma(Getsollution(iks[p], iter), iks[p]) * Matrices.MMatr2[p][k][i][j] * q[iter - 1][nums[k]];
-
-                                }
-                                //AL[j - i + 2][nums[i]] -= hx / dt * dersigma(q[iter][nums[j]], iks[j]) * Matrices.MMatr[k][i][j] * q[iter - 1][nums[k]];
+                                AL[j - i + 2][nums[i]] -= hx * dersigma(Getsollution(iks[j], iter), iks[j]) * Matrices.MMatr[p][i][j] / dt * q[iter - 1][nums[p]];
                             }
                         }
                         double curb = 0;
@@ -340,12 +346,7 @@ namespace UMF
                         {
                             for (int r = 0; r < 3; r++)
                             {
-                                for (int p = 0; p < 3; p++)
-                                {
-                                    bL[nums[i]] += hx / dt * q[iter][nums[r]] * q[iter][nums[j]] * dersigma(q[iter][nums[p]], iks[p]) * Matrices.MMatr2[p][i][j][r];
-
-                                }
-                                //bL[nums[i]] += hx / dt * q[iter][nums[r]] * q[iter][nums[j]] * dersigma(q[iter][nums[r]], iks[r]) * Matrices.MMatr[i][j][r];
+                            bL[nums[i]] += hx / dt * q[iter][nums[r]] * q[iter][nums[j]] * dersigma(Getsollution(iks[r], iter), iks[r]) * Matrices.MMatr[i][j][r];
                             }
                         }
                         for (int r = 0; r < 3; r++)
@@ -431,6 +432,14 @@ namespace UMF
                         break;
                 }
                 //проверим критерий остановки
+               
+                //решаем слау
+                if (relresidual>eps)
+                {
+                    LU();
+                    Gaus(iter, omega);
+                    iternum++;
+                }
                 MatrixMult(iter);
                 double summ1 = 0, summ2 = 0;
                 for (int i = 0; i < n; i++)
